@@ -92,7 +92,11 @@
   .membtn:active{transform:scale(.92);}
   .membtn.on{background:var(--starSoft);color:var(--star);}
   .membtn.on .pop{display:inline-block;animation:starPop .45s cubic-bezier(.2,.9,.3,1.4);}
-  .addsent{border:2px dashed var(--line);border-radius:12px;padding:10px;font-family:var(--body);font-size:13px;color:#b9a986;background:transparent;cursor:pointer;}
+  .doneline{font-size:13px;color:var(--soft);background:#fffdf8;border:1px solid var(--line);border-radius:12px;padding:10px 12px;text-align:center;}
+  .doneline b{color:var(--star);}
+  .donebtn{border:none;border-radius:12px;padding:11px;font-family:var(--body);font-size:13.5px;font-weight:700;color:#fff;cursor:pointer;background:linear-gradient(135deg,#e8a23d,#c9821f);box-shadow:0 6px 14px rgba(232,162,61,.3);transition:transform .14s ease;}
+  .donebtn:active{transform:scale(.98);}
+  .donebtn.off{background:#f0ead9;color:var(--soft);box-shadow:none;cursor:default;}
 
   /* 휴지통 */
   .trash-wrap{margin-top:26px;}
@@ -179,6 +183,9 @@
     <div class="mtitle">오늘 문장 추가</div>
     <div class="field"><label>날짜</label><input class="inp" type="date" id="addDate" /></div>
     <div class="field"><label>방송 주제 (선택)</label><input class="inp" id="addTitle" placeholder="예: 주말 계획 이야기하기" /></div>
+    <div class="field"><label>영어 문장</label><textarea class="area en" id="aEn" placeholder="English sentence"></textarea></div>
+    <div class="field"><label>번역</label><textarea class="area ko" id="aKo" placeholder="한글 번역"></textarea></div>
+    <p class="mtext" id="addErr" style="color:var(--rose);display:none;text-align:left;margin:0 0 12px;"></p>
     <div class="btn-row"><button class="ghost" id="addCancel">취소</button><button class="solid" id="addOk">추가</button></div>
   </div>
 </div>
@@ -188,7 +195,7 @@
   <div class="modal">
     <div class="mtitle" id="editTitle">문장 추가</div>
     <div class="field"><label>영어 문장</label><textarea class="area en" id="eEn" placeholder="English sentence"></textarea></div>
-    <div class="field"><label>한글 뜻</label><textarea class="area ko" id="eKo" placeholder="우리말 뜻"></textarea></div>
+    <div class="field"><label>번역</label><textarea class="area ko" id="eKo" placeholder="한글 번역"></textarea></div>
     <div class="btn-row">
       <button class="danger-link" id="eDelete" style="display:none">삭제</button>
       <button class="ghost" id="eCancel">취소</button>
@@ -206,14 +213,24 @@
   </div>
 </div>
 
+<!-- 첫 완성자 이름 모달 -->
+<div class="back" id="nameBack">
+  <div class="modal">
+    <div class="mtitle center">오늘의 첫 완성! ✨</div>
+    <p class="mtext">가장 먼저 완성했어요. 이름을 남겨주세요.</p>
+    <div class="field"><input class="inp" id="nameInput" placeholder="이름" maxlength="10" /></div>
+    <div class="btn-row"><button class="ghost" id="nameCancel">취소</button><button class="solid" id="nameOk">남기기</button></div>
+  </div>
+</div>
+
 <!-- 비밀번호 모달 (영구 삭제) -->
 <div class="back" id="pinBack">
   <div class="modal">
-    <div class="mtitle center">영구 삭제</div>
+    <div class="mtitle center">삭제 확인</div>
     <p class="mtext" id="pinText"></p>
     <div class="field"><label>비밀번호</label><input class="inp" type="password" id="pinInput" inputmode="numeric" placeholder="••••" /></div>
     <p class="mtext" id="pinErr" style="color:var(--rose);display:none;margin-bottom:10px;">비밀번호가 맞지 않아요.</p>
-    <div class="btn-row"><button class="ghost" id="pinCancel">취소</button><button class="solid" id="pinOk">영구 삭제</button></div>
+    <div class="btn-row"><button class="ghost" id="pinCancel">취소</button><button class="solid" id="pinOk">삭제</button></div>
   </div>
 </div>
 
@@ -225,8 +242,7 @@
      비워두면 이 기기에만 저장됩니다(테스트용).
    ══════════════════════════════════════════════════════════════ */
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbws34vhkiKdT3Fd5ADFK8y_XDNO3963ow94KhFcYNVyTk2XkfKiVmHUmBEsKCGw-Mw6aA/exec",   
-           // 예) "https://script.google.com/macros/s/AKfy...../exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbws34vhkiKdT3Fd5ADFK8y_XDNO3963ow94KhFcYNVyTk2XkfKiVmHUmBEsKCGw-Mw6aA/exec",
   OWNER_PIN: ""  // 로컬 테스트용. 실제 보안은 Code.gs의 OWNER_PIN이 담당합니다.
 };
 /* ══════════════════════════════════════════════════════════════ */
@@ -512,6 +528,16 @@ function render(){
     const col = collapsed.has(date);
     const allDone = sents.length>0 && dm===sents.length;
     const isToday = date===todayIso();
+    // 완성 영역: 첫 완성자 이름 + 완성 인원
+    const dn = d.done || null;
+    let doneArea = "";
+    if(dn && dn.count>0){
+      doneArea += `<div class="doneline">✨ 첫 완성 <b>${esc(dn.first||"?")}</b>${dn.count>1?` · 함께 완성 ${dn.count}명`:""}</div>`;
+    }
+    if(isToday){
+      let pressed=false; try{ pressed = localStorage.getItem("iptyeong-done-"+date)==="1"; }catch(e){}
+      doneArea += `<button class="donebtn${pressed?" off":""}" data-done="${date}" ${pressed?"disabled":""}>${pressed?"완성 표시했어요 ✓":"오늘 완성"}</button>`;
+    }
     const cls = "day" + (col?" collapsed":"") + (allDone?" done":"") + (isToday?" today":"");
     return `<section class="${cls}">
       <div class="dhead">
@@ -521,7 +547,7 @@ function render(){
         <span class="dstar">★ ${dm}</span>
         <button class="del" data-del="${date}">삭제</button>
       </div>
-      ${col ? "" : `${d.title?`<div class="dtopic">📻 ${esc(d.title)}</div>`:""}<div class="sents">${rows}<button class="addsent" data-add="${date}">＋ 문장 추가</button></div>`}
+      ${col ? "" : `${d.title?`<div class="dtopic">📻 ${esc(d.title)}</div>`:""}<div class="sents">${rows}${doneArea}</div>`}
     </section>`;
   }).join("");
   markSpeaking();
@@ -570,8 +596,13 @@ async function upsertSentence(date, sentId, en, ko, memorized){
 }
 
 document.getElementById("addDayBtn").addEventListener("click", ()=>{
-  document.getElementById("addDate").value = todayIso();
+  const dEl=document.getElementById("addDate");
+  dEl.value = todayIso();
+  dEl.max = todayIso(); // 미래 날짜 선택 불가
   document.getElementById("addTitle").value = "";
+  document.getElementById("aEn").value = "";
+  document.getElementById("aKo").value = "";
+  document.getElementById("addErr").style.display="none";
   document.getElementById("addBack").classList.add("on");
 });
 document.getElementById("addCancel").addEventListener("click", ()=>document.getElementById("addBack").classList.remove("on"));
@@ -579,12 +610,19 @@ document.getElementById("addBack").addEventListener("click", e=>{ if(e.target.id
 document.getElementById("addOk").addEventListener("click", async ()=>{
   const date=document.getElementById("addDate").value;
   const title=document.getElementById("addTitle").value.trim();
+  const aEn=document.getElementById("aEn").value.trim();
+  const aKo=document.getElementById("aKo").value.trim();
+  const err=document.getElementById("addErr");
+  if(!date){ err.textContent="날짜를 선택해주세요."; err.style.display="block"; return; }
+  if(date > todayIso()){ err.textContent="오늘 이후의 날짜에는 작성할 수 없어요."; err.style.display="block"; return; }
+  err.style.display="none";
   document.getElementById("addBack").classList.remove("on");
-  if(!date) return;
+  // 동일 날짜는 카드를 새로 만들지 않고 그 카드에 합쳐짐
   if(!state.days[date]) state.days[date]={ title, sentences:[] };
   else if(title) state.days[date].title=title;
   render();
   await postAction({ addDay:{ date, title } });
+  if(aEn || aKo){ await upsertSentence(date, uid(), aEn, aKo, false); }
 });
 
 document.getElementById("reviewBtn").addEventListener("click", ()=>{
@@ -712,7 +750,7 @@ function renderTrash(){
         const dt=new Date(it.deletedAt||Date.now());
         const when=`${dt.getMonth()+1}/${dt.getDate()} 삭제`;
         const tag = it.type==="day" ? "하루 전체" : "문장";
-        return `<div class="trash-item"><div class="ti-main"><div class="ti-label">${esc(it.label||"")}</div><div class="ti-sub">${tag} · ${when}</div></div><button class="ti-restore" data-trestore="${it.tid}">복구</button><button class="ti-purge" data-tpurge="${it.tid}">영구삭제</button></div>`;
+        return `<div class="trash-item"><div class="ti-main"><div class="ti-label">${esc(it.label||"")}</div><div class="ti-sub">${tag} · ${when}</div></div><button class="ti-restore" data-trestore="${it.tid}">복구</button><button class="ti-purge" data-tpurge="${it.tid}">삭제</button></div>`;
       }).join("") + `</div>`;
   }
   wrap.innerHTML=html;
@@ -780,6 +818,34 @@ document.getElementById("trashWrap").addEventListener("click", e=>{
   const pg=e.target.closest("[data-tpurge]"); if(pg){ openPin({ type:"one", tid:pg.getAttribute("data-tpurge"), text:"이 항목을 영구히 삭제합니다. 되돌릴 수 없어요." }); }
 });
 
+/* ── 오늘 완성 ── */
+let doneTarget=null;
+function openName(date){
+  doneTarget=date;
+  document.getElementById("nameInput").value="";
+  document.getElementById("nameBack").classList.add("on");
+  setTimeout(()=>{ try{ document.getElementById("nameInput").focus(); }catch(e){} }, 60);
+}
+function closeName(){ document.getElementById("nameBack").classList.remove("on"); doneTarget=null; }
+document.getElementById("nameCancel").addEventListener("click", closeName);
+document.getElementById("nameBack").addEventListener("click", e=>{ if(e.target.id==="nameBack") closeName(); });
+document.getElementById("nameOk").addEventListener("click", ()=>{
+  if(!doneTarget) return;
+  const name=document.getElementById("nameInput").value.trim() || "누군가";
+  const dt=doneTarget;
+  closeName();
+  markDone(dt, name);
+});
+async function markDone(date, name){
+  const day=state.days[date]; if(!day) return;
+  if(!day.done) day.done={ first:"", count:0 };
+  if(!day.done.first && name) day.done.first=name;
+  day.done.count=(day.done.count||0)+1;
+  try{ localStorage.setItem("iptyeong-done-"+date, "1"); }catch(e){}
+  render();
+  await postAction({ dayDone:{ date, name: name||"" } });
+}
+
 /* 목록 위임 클릭 */
 document.getElementById("list").addEventListener("click", e=>{
   const cl=e.target.closest("[data-collapse]");
@@ -797,8 +863,15 @@ document.getElementById("list").addEventListener("click", e=>{
   if(rv){ revealed.add(rv.getAttribute("data-reveal")); render(); return; }
   const ed=e.target.closest("[data-edit-s]");
   if(ed){ openEdit(ed.getAttribute("data-edit-d"), ed.getAttribute("data-edit-s")); return; }
-  const ad=e.target.closest("[data-add]");
-  if(ad){ openEdit(ad.getAttribute("data-add"), null); return; }
+  const dnb=e.target.closest("[data-done]");
+  if(dnb && !dnb.disabled){
+    const dt=dnb.getAttribute("data-done");
+    const day=state.days[dt];
+    if(!day) return;
+    if(!day.done || !day.done.count){ openName(dt); }   // 첫 완성 → 이름 입력
+    else { markDone(dt, ""); }                            // 이후 → 카운트만
+    return;
+  }
   const dl=e.target.closest("[data-del]");
   if(dl){ openDel(dl.getAttribute("data-del")); }
 });
