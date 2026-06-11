@@ -634,20 +634,35 @@ async function sync(){
     state = await fetchData();
     if(!state.days) state.days={};
     if(!state.trash) state.trash=[];
-    // 시드 병합: 아직 없는 날짜/문장만 채워 넣음 (기존 내용·삭제는 보존)
-    const storeEmpty = Object.keys(state.days).length===0;
-    if(!alreadySeeded() || (shared() && storeEmpty)){
-      let changed=false;
+    // 시드: 아직 없는 날짜/문장만 채움. 공유 모드에선 절대 'full'로 덮어쓰지 않고
+    // 빠진 항목만 하나씩 추가(additive) → 기존 별/기록을 지울 수 없음
+    if(!alreadySeeded() || (shared() && Object.keys(state.days).length===0)){
+      const addQueue=[]; // {date, sentence}  (공유 모드 서버 반영용)
+      let changedLocal=false;
       for(const date in SEED.days){
-        if(!state.days[date]){ state.days[date]=JSON.parse(JSON.stringify(SEED.days[date])); changed=true; }
-        else {
-          const ids=new Set((state.days[date].sentences||[]).map(s=>s.id));
-          SEED.days[date].sentences.forEach(s=>{ if(!ids.has(s.id)){ state.days[date].sentences.push(JSON.parse(JSON.stringify(s))); changed=true; } });
+        if(!state.days[date]){
+          state.days[date]={ title: SEED.days[date].title||"", sentences:[] };
+          changedLocal=true;
         }
+        const ids=new Set((state.days[date].sentences||[]).map(s=>s.id));
+        SEED.days[date].sentences.forEach(s=>{
+          if(!ids.has(s.id)){
+            const cp=JSON.parse(JSON.stringify(s));
+            state.days[date].sentences.push(cp);
+            addQueue.push({ date, sentence:cp });
+            changedLocal=true;
+          }
+        });
       }
-      if(changed){
-        if(shared()){ await postAction({ full: state }); }
-        else { try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(e){} }
+      if(changedLocal){
+        if(shared()){
+          // 빠진 문장만 순차적으로 서버에 추가 (full 덮어쓰기 안 함)
+          for(const it of addQueue){
+            await postAction({ upsertSentence:{ date:it.date, id:it.sentence.id, en:it.sentence.en, ko:it.sentence.ko, memorized:!!it.sentence.memorized } });
+          }
+        } else {
+          try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(e){}
+        }
       }
       markSeeded();
     }
@@ -666,7 +681,25 @@ async function upsertSentence(date, sentId, en, ko, memorized){
   const obj = { id:sentId, en, ko, memorized:!!memorized };
   if(i>=0) arr[i]=obj; else arr.push(obj);
   render();
+  if(!shared()){
+    await postAction({ upsertSentence:{ date, id:obj.id, en:obj.en, ko:obj.ko, memorized:obj.memorized } });
+    return;
+  }
+  // 공유 모드: 저장 후 서버에서 되읽어 실제 저장 여부를 확인
+  setStatus("저장 중…");
   await postAction({ upsertSentence:{ date, id:obj.id, en:obj.en, ko:obj.ko, memorized:obj.memorized } });
+  setTimeout(async ()=>{
+    try{
+      const srv = await fetchData();
+      const sv = ((srv.days[date]||{}).sentences||[]).find(x=>x.id===sentId);
+      if(sv && (!!sv.memorized === !!memorized)){
+        state = srv; if(!state.days)state.days={}; if(!state.trash)state.trash=[];
+        render(); setStatus("저장됨 · 모두와 공유 중 ✓");
+      } else {
+        setStatus("⚠ 서버에 저장되지 않았어요 — Code.gs 최신본을 '새 버전'으로 배포했는지 확인해주세요.");
+      }
+    }catch(e){ setStatus("동기화 확인 실패 — 잠시 후 다시 시도"); }
+  }, 1500);
 }
 
 document.getElementById("addDayBtn").addEventListener("click", ()=>{
