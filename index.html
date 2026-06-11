@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="UTF-8" />
@@ -641,7 +641,7 @@ function setHide(side){
 document.getElementById("hideKo").addEventListener("click", ()=>setHide("ko"));
 document.getElementById("hideEn").addEventListener("click", ()=>setHide("en"));
 
-/* ── 영어 읽어주기 (브라우저 내장 TTS, 음원 파일 불필요) ── */
+/* ── 영어 읽어주기 (브라우저 내장 TTS) ── */
 const ttsSupported = ("speechSynthesis" in window) && ("SpeechSynthesisUtterance" in window);
 let speakTimer = null;
 function pickEnVoice(){
@@ -649,6 +649,35 @@ function pickEnVoice(){
     const vs = window.speechSynthesis.getVoices() || [];
     return vs.find(v=>/en[-_]US/i.test(v.lang)) || vs.find(v=>/^en/i.test(v.lang)) || null;
   }catch(e){ return null; }
+}
+function buildUtter(s, id){
+  const u = new SpeechSynthesisUtterance(s.en);
+  u.lang = "en-US";
+  u.rate = 1.0;
+  const v = pickEnVoice(); if(v) u.voice = v;
+  u._started = false;
+  u.onstart = ()=>{ u._started = true; };
+  u.onend = ()=>{ if(speakingId===id){ speakingId=null; markSpeaking(); } };
+  u.onerror = ()=>{
+    if(speakingId===id){ speakingId=null; markSpeaking(); }
+    setStatus("음성 재생에 실패했어요 — 기기의 영어 음성(TTS)과 미디어 볼륨을 확인해보세요.");
+  };
+  return u;
+}
+function fireSpeak(u, id){
+  try{ window.speechSynthesis.resume(); }catch(e){}
+  try{ window.speechSynthesis.speak(u); }catch(e){
+    speakingId=null; markSpeaking();
+    setStatus("음성 재생에 실패했어요 — Chrome으로 열어보세요.");
+    return;
+  }
+  setTimeout(()=>{
+    if(!u._started && speakingId===id){
+      try{ window.speechSynthesis.cancel(); }catch(e){}
+      speakingId=null; markSpeaking();
+      setStatus("소리가 안 나면: 미디어 볼륨 → 기기 설정의 Google 음성(TTS) → Chrome으로 열기 순으로 확인해보세요.");
+    }
+  }, 2500);
 }
 function speak(id){
   if(!ttsSupported){ setStatus("이 브라우저는 음성 읽기를 지원하지 않아요 — Chrome으로 열어보세요."); return; }
@@ -659,36 +688,17 @@ function speak(id){
   }
   const s = findSentence(id);
   if(!s || !s.en){ return; }
-  try{ window.speechSynthesis.cancel(); }catch(e){}
   if(speakTimer){ clearTimeout(speakTimer); speakTimer=null; }
+  const busy = (()=>{ try{ return window.speechSynthesis.speaking || window.speechSynthesis.pending; }catch(e){ return false; } })();
   speakingId = id; markSpeaking();
-  speakTimer = setTimeout(()=>{
-    speakTimer=null;
-    const u = new SpeechSynthesisUtterance(s.en);
-    u.lang = "en-US";
-    u.rate = 1.0;
-    const v = pickEnVoice(); if(v) u.voice = v;
-    let started = false;
-    u.onstart = ()=>{ started = true; };
-    u.onend = ()=>{ if(speakingId===id){ speakingId=null; markSpeaking(); } };
-    u.onerror = ()=>{
-      if(speakingId===id){ speakingId=null; markSpeaking(); }
-      setStatus("음성 재생에 실패했어요 — 기기의 영어 음성(TTS) 설치와 미디어 볼륨을 확인해보세요.");
-    };
-    try{ window.speechSynthesis.resume(); }catch(e){}
-    try{ window.speechSynthesis.speak(u); }catch(e){
-      speakingId=null; markSpeaking();
-      setStatus("음성 재생에 실패했어요 — Chrome으로 열어보세요.");
-      return;
-    }
-    setTimeout(()=>{
-      if(!started && speakingId===id){
-        try{ window.speechSynthesis.cancel(); }catch(e){}
-        speakingId=null; markSpeaking();
-        setStatus("소리가 안 나면: 미디어 볼륨 확인 → 설정에서 Google 음성(TTS) 설치 → Chrome으로 열기 순서로 확인해보세요.");
-      }
-    }, 2500);
-  }, 120);
+  if(!busy){
+    // 사용자 터치 직후 즉시 재생 (브라우저 자동재생 제한 회피)
+    fireSpeak(buildUtter(s, id), id);
+  } else {
+    // 다른 문장 재생 중: 멈춘 뒤 약간 띄워 재생 (안드로이드 cancel 버그 회피)
+    try{ window.speechSynthesis.cancel(); }catch(e){}
+    speakTimer = setTimeout(()=>{ speakTimer=null; fireSpeak(buildUtter(s, id), id); }, 150);
+  }
 }
 function findSentence(id){
   for(const date in state.days){
@@ -707,8 +717,15 @@ if(ttsSupported){
   if(window.speechSynthesis.onvoiceschanged !== undefined){
     window.speechSynthesis.onvoiceschanged = ()=>{ try{ window.speechSynthesis.getVoices(); }catch(e){} };
   }
+  // 첫 터치에서 무음 재생으로 음성 엔진 잠금 해제
   document.addEventListener("touchstart", function warm(){
-    try{ window.speechSynthesis.getVoices(); window.speechSynthesis.resume(); }catch(e){}
+    try{
+      window.speechSynthesis.resume();
+      const w = new SpeechSynthesisUtterance(" ");
+      w.volume = 0;
+      window.speechSynthesis.speak(w);
+      window.speechSynthesis.getVoices();
+    }catch(e){}
     document.removeEventListener("touchstart", warm);
   }, { once:true, passive:true });
 }
