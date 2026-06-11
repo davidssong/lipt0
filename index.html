@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-<meta name="color-scheme" content="light" />
+<meta name="color-scheme" content="only light" />
 <meta name="theme-color" content="#f4f4f9" />
 <title>입이 트이는 영어 — 통암기 노트</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -21,7 +21,10 @@
     --star:#e8a23d; --starSoft:#fdf3e2; --rose:#d9587f;
     --serif:'Gowun Batang',serif; --script:'Nanum Pen Script',cursive; --body:'Gowun Dodum',sans-serif;
   }
-  body{font-family:var(--body);color:var(--ink);min-height:100vh;background:var(--base);padding-bottom:80px;word-break:keep-all;}
+  @media (prefers-color-scheme: dark){
+    html,body{background-color:#f4f4f9 !important;color:#322b21 !important;color-scheme:only light;}
+  }
+  body{font-family:var(--body);color:var(--ink);min-height:100vh;background:var(--base);padding-bottom:80px;word-break:keep-all;color-scheme:only light;}
 
   /* ── 시그니처: 지금 시간의 하늘 ── */
   .sky{position:relative;overflow:hidden;padding:42px 20px 86px;border-radius:0 0 34px 34px;}
@@ -173,7 +176,7 @@
   <div id="list"></div>
 
   <div class="trash-wrap" id="trashWrap"></div>
-  <p class="footnote">하늘은 지금 시간을 따라 바뀌어요 — 새벽, 아침, 낮, 노을, 그리고 별이 뜨는 밤. <span style="opacity:.55">· v3</span></p>
+  <p class="footnote">하늘은 지금 시간을 따라 바뀌어요 — 새벽, 아침, 낮, 노을, 그리고 별이 뜨는 밤. <span style="opacity:.55">· v4</span></p>
   <div class="status" id="status"></div>
 </div>
 
