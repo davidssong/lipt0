@@ -11,7 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&family=Nanum+Pen+Script&display=swap" rel="stylesheet">
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
-  html{background-color:#f4f4f9;color-scheme:only light;font-size:clamp(16px, calc(0.6vw + 13px), 25px);}
+  html{background-color:#f4f4f9;color-scheme:only light;font-size:clamp(16px, calc(0.6vw + 13px), 26px);}
   :root{
     color-scheme:only light;
     /* 톤: 베이스는 C(맑은 연보라빛), 하루 블록은 A(따뜻한 종이) */
@@ -666,7 +666,7 @@ async function upsertSentence(date, sentId, en, ko, memorized){
   const obj = { id:sentId, en, ko, memorized:!!memorized };
   if(i>=0) arr[i]=obj; else arr.push(obj);
   render();
-  await postAction({ upsertSentence:{ date, sentence:obj } });
+  await postAction({ upsertSentence:{ date, id:obj.id, en:obj.en, ko:obj.ko, memorized:obj.memorized } });
 }
 
 document.getElementById("addDayBtn").addEventListener("click", ()=>{
