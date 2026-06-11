@@ -50,9 +50,16 @@
   .btn.add{background:linear-gradient(135deg,#a8543a,#8c3f2c);color:#fff;box-shadow:0 8px 18px rgba(140,63,44,.3);}
   .hidewrap{display:none;width:100%;gap:7px;margin-top:4px;}
   .hidewrap.on{display:flex;}
-  .hideopt{flex:1;border:1.5px solid var(--line);background:#fff;border-radius:11px;padding:9px 0;font-family:var(--body);font-size:13px;font-weight:700;color:var(--sub);cursor:pointer;transition:transform .14s ease;}
+  .hideopt{flex:1;border:1.5px solid var(--line);background:#fff;border-radius:11px;padding:9px 0;font-family:var(--body);font-size:12px;font-weight:700;color:var(--sub);cursor:pointer;transition:transform .14s ease;}
   .hideopt:active{transform:scale(.97);}
   .hideopt.on{border-color:var(--violet);background:var(--violetSoft);color:var(--violet);}
+  .pickbtn{flex:1.2;border:1.5px solid var(--star);background:var(--starSoft);border-radius:11px;padding:9px 0;font-family:var(--body);font-size:12.5px;font-weight:700;color:var(--star);cursor:pointer;transition:transform .14s ease;white-space:nowrap;}
+  .pickbtn:active{transform:scale(.97);}
+  .pickcard{border:1.5px solid var(--star);background:linear-gradient(165deg,#fffdf6,#fff8ea);box-shadow:0 6px 20px rgba(232,162,61,.16);}
+  .pickcard .dhead h2{color:var(--star);font-size:17px;}
+  .pick-next{border:none;border-radius:99px;padding:8px 15px;font-family:var(--body);font-size:13px;font-weight:700;color:#fff;cursor:pointer;background:linear-gradient(135deg,#e8a23d,#c9821f);box-shadow:0 4px 10px rgba(232,162,61,.28);transition:transform .14s ease;}
+  .pick-next:active{transform:scale(.96);}
+  .pick-empty{font-size:13.5px;color:var(--soft);text-align:center;padding:10px 4px;line-height:1.6;}
 
   .empty-state{text-align:center;color:var(--soft);font-size:13.5px;padding:44px 12px;margin-top:22px;border:2px dashed var(--line);border-radius:20px;background:var(--card);}
 
@@ -174,6 +181,7 @@
     <div class="hidewrap" id="hideWrap">
       <button class="hideopt on" id="hideKo">한글 가리기</button>
       <button class="hideopt" id="hideEn">영어 가리기</button>
+      <button class="pickbtn" id="pickBtn">✨ 문장 뽑기</button>
     </div>
   </div>
 
@@ -227,7 +235,8 @@
   <div class="modal">
     <div class="mtitle center">오늘의 첫 성공! ✨</div>
     <p class="mtext">가장 먼저 성공했어요. 이름을 남겨주세요.</p>
-    <div class="field"><input class="inp" id="nameInput" placeholder="이름" maxlength="10" /></div>
+    <div class="field"><input class="inp" id="nameInput" placeholder="Name (영어로)" maxlength="14" /></div>
+    <p class="mtext" id="nameErr" style="color:var(--rose);display:none;text-align:left;margin:-4px 0 12px;font-size:12.5px;"></p>
     <div class="btn-row"><button class="ghost" id="nameCancel">취소</button><button class="solid" id="nameOk">남기기</button></div>
   </div>
 </div>
@@ -413,6 +422,8 @@ let reviewHide = "ko"; // 복습 때 가릴 쪽: "ko" | "en"
 let speakingId = null;  // 지금 읽고 있는 문장 id
 let collapsed = new Set(); // 접힌 날짜
 let revealed = new Set();
+let pickActive = false; // 문장 뽑기 모드
+let pickId = null;      // 현재 뽑힌 문장 id
 let editTarget = null;   // { date, sentId|null }
 let delTarget = null;    // date
 let pinAction = null;    // 영구 삭제 대기 동작 {type, tid?, text}
@@ -496,7 +507,7 @@ function render(){
   const st = calcStats();
   document.getElementById("memCount").textContent = `★ ${st.mem}`;
   document.getElementById("totCount").textContent = `/ ${st.total}문장`;
-  document.getElementById("streak").textContent = st.streak>0 ? `🔥 ${st.streak}일 연속` : "";
+  document.getElementById("streak").textContent = "";
   const rb = document.getElementById("reviewBtn");
   rb.classList.toggle("on", review);
   rb.textContent = review ? "복습 중 ✓" : "복습하기";
@@ -561,7 +572,59 @@ function render(){
       ${col ? "" : `${d.title?`<div class="dtopic">📻 ${esc(d.title)}</div>`:""}<div class="sents">${rows}${doneArea}</div>`}
     </section>`;
   }).join("");
+  // 문장 뽑기 카드는 맨 위(오늘 날짜보다 위)에
+  list.innerHTML = pickCardHtml() + list.innerHTML;
   markSpeaking();
+}
+
+/* ── 문장 뽑기 ── */
+function starredSentences(){
+  const out=[];
+  for(const date in state.days){
+    (state.days[date].sentences||[]).forEach(s=>{ if(s.memorized) out.push({date, s}); });
+  }
+  return out;
+}
+function pickCardHtml(){
+  if(!review || !pickActive) return "";
+  const pool = starredSentences();
+  if(pool.length===0){
+    return `<section class="day pickcard">
+      <div class="dhead"><h2>✨ 문장 뽑기</h2><span class="ln"></span><button class="del" data-pickclose="1">닫기</button></div>
+      <div class="pick-empty">아직 ★ 표시한 문장이 없어요.<br>외운 문장에 ★를 눌러두면 여기서 무작위로 복습할 수 있어요.</div>
+    </section>`;
+  }
+  const found = pool.find(p=>p.s.id===pickId) || pool[0];
+  const s = found.s;
+  const koHidden = reviewHide==="ko" && !revealed.has(s.id);
+  const enHidden = reviewHide==="en" && !revealed.has(s.id);
+  const enHtml = enHidden
+    ? `<div class="en blurred" data-reveal="${s.id}">${s.en?esc(s.en):'(영어 문장)'}<span class="hint">탭하여 보기</span></div>`
+    : `<div class="en">${s.en?esc(s.en):'<span class="ph">(영어 문장)</span>'}</div>`;
+  const koHtml = koHidden
+    ? `<div class="ko blurred" data-reveal="${s.id}">${esc(s.ko)||"—"}<span class="hint">탭하여 보기</span></div>`
+    : `<div class="ko">${esc(s.ko)}</div>`;
+  return `<section class="day pickcard">
+    <div class="dhead"><h2>✨ 문장 뽑기</h2><span class="ln"></span><button class="del" data-pickclose="1">닫기</button></div>
+    <div class="sents"><div class="sent">
+      ${enHtml}${koHtml}
+      <div class="foot">
+        <div class="foot-left"><button class="speakbtn" data-speak="${s.id}" title="듣기">듣기</button></div>
+        <button class="pick-next" data-picknext="1">다른 문장 →</button>
+      </div>
+    </div></div>
+  </section>`;
+}
+function pickRandom(){
+  const pool = starredSentences();
+  if(pool.length===0){ pickId=null; return; }
+  let cand = pool[Math.floor(Math.random()*pool.length)].s.id;
+  // 가능하면 직전 문장과 다르게
+  for(let i=0;i<6 && pool.length>1 && cand===pickId;i++){
+    cand = pool[Math.floor(Math.random()*pool.length)].s.id;
+  }
+  pickId = cand;
+  revealed.delete(pickId); // 새로 뽑으면 다시 가려짐
 }
 
 function setStatus(t){ document.getElementById("status").textContent=t; }
@@ -638,6 +701,7 @@ document.getElementById("addOk").addEventListener("click", async ()=>{
 
 document.getElementById("reviewBtn").addEventListener("click", ()=>{
   review=!review; revealed=new Set();
+  if(!review){ pickActive=false; pickId=null; }
   document.getElementById("hideWrap").classList.toggle("on", review);
   render();
 });
@@ -649,6 +713,12 @@ function setHide(side){
 }
 document.getElementById("hideKo").addEventListener("click", ()=>setHide("ko"));
 document.getElementById("hideEn").addEventListener("click", ()=>setHide("en"));
+document.getElementById("pickBtn").addEventListener("click", ()=>{
+  pickActive = true;
+  pickRandom();
+  render();
+  try{ document.querySelector(".pickcard").scrollIntoView({behavior:"smooth", block:"center"}); }catch(e){}
+});
 
 /* ── 안내문 ── */
 function showNotice(html){
@@ -899,6 +969,7 @@ let doneTarget=null;
 function openName(date){
   doneTarget=date;
   document.getElementById("nameInput").value="";
+  try{ document.getElementById("nameErr").style.display="none"; }catch(e){}
   document.getElementById("nameBack").classList.add("on");
   setTimeout(()=>{ try{ document.getElementById("nameInput").focus(); }catch(e){} }, 60);
 }
@@ -907,7 +978,15 @@ document.getElementById("nameCancel").addEventListener("click", closeName);
 document.getElementById("nameBack").addEventListener("click", e=>{ if(e.target.id==="nameBack") closeName(); });
 document.getElementById("nameOk").addEventListener("click", ()=>{
   if(!doneTarget) return;
-  const name=document.getElementById("nameInput").value.trim() || "누군가";
+  const raw=document.getElementById("nameInput").value.trim();
+  // 이름은 영어로만 (비속어 한글 입력 방지)
+  if(!/^[A-Za-z][A-Za-z .'-]*$/.test(raw)){
+    const ne=document.getElementById("nameErr");
+    ne.textContent = raw ? "영어 이름만 입력할 수 있어요." : "이름을 입력해주세요.";
+    ne.style.display="block";
+    return;
+  }
+  const name=raw;
   const dt=doneTarget;
   closeName();
   markDone(dt, name);
@@ -935,6 +1014,10 @@ document.getElementById("list").addEventListener("click", e=>{
     if(s) upsertSentence(date, id, s.en, s.ko, !s.memorized);
     return;
   }
+  const pn=e.target.closest("[data-picknext]");
+  if(pn){ pickRandom(); render(); return; }
+  const pc=e.target.closest("[data-pickclose]");
+  if(pc){ pickActive=false; pickId=null; render(); return; }
   const rv=e.target.closest("[data-reveal]");
   if(rv){ revealed.add(rv.getAttribute("data-reveal")); render(); return; }
   const ed=e.target.closest("[data-edit-s]");
