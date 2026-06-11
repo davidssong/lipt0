@@ -11,7 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&family=Nanum+Pen+Script&display=swap" rel="stylesheet">
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
-  html{background-color:#f4f4f9;color-scheme:only light;font-size:clamp(16px, calc(0.6vw + 13px), 21px);}
+  html{background-color:#f4f4f9;color-scheme:only light;font-size:clamp(16px, calc(0.6vw + 13px), 25px);}
   :root{
     color-scheme:only light;
     /* 톤: 베이스는 C(맑은 연보라빛), 하루 블록은 A(따뜻한 종이) */
@@ -851,16 +851,11 @@ document.getElementById("eSave").addEventListener("click", async ()=>{
   closeEdit();
   await upsertSentence(date, sentId, en, ko, prev?prev.memorized:false);
 });
-document.getElementById("eDelete").addEventListener("click", async ()=>{
+document.getElementById("eDelete").addEventListener("click", ()=>{
   if(!editTarget || !editTarget.sentId) return;
   const { date, sentId } = editTarget;
-  const arr = state.days[date].sentences||[];
-  const s = arr.find(x=>x.id===sentId);
-  state.days[date].sentences = arr.filter(x=>x.id!==sentId);
-  const ttid = tid();
-  if(s){ if(!state.trash) state.trash=[]; state.trash.unshift({ tid:ttid, type:"sentence", date, sentence:s, label:trunc(s.en||s.ko,40), deletedAt:Date.now() }); }
-  closeEdit(); render();
-  await postAction({ deleteSentence:{ date, sentId, tid:ttid } });
+  closeEdit();
+  openPin({ type:"delSent", date, sentId, text:"이 문장을 휴지통으로 옮깁니다. 비밀번호를 입력하세요." });
 });
 
 /* 하루 삭제 */
@@ -940,19 +935,33 @@ document.getElementById("pinBack").addEventListener("click", e=>{ if(e.target.id
 document.getElementById("pinOk").addEventListener("click", async ()=>{
   if(!pinAction) return;
   const pin=document.getElementById("pinInput").value;
+  const t=pinAction.type;
+  if(!state.trash) state.trash=[];
+
   if(!shared()){
     // 로컬 테스트: CONFIG.OWNER_PIN과 비교 (비어 있으면 통과)
     if(CONFIG.OWNER_PIN && pin!==CONFIG.OWNER_PIN){ document.getElementById("pinErr").style.display="block"; return; }
-    if(pinAction.type==="one") state.trash=(state.trash||[]).filter(x=>x.tid!==pinAction.tid);
-    else state.trash=[];
+    if(t==="one") state.trash=(state.trash||[]).filter(x=>x.tid!==pinAction.tid);
+    else if(t==="all") state.trash=[];
+    else if(t==="delDay"){
+      const d=pinAction.date, day=state.days[d];
+      if(day){ state.trash.unshift({ tid:tid(), type:"day", date:d, day, label:fmtK(d)+" (하루 전체)", deletedAt:Date.now() }); delete state.days[d]; }
+    } else if(t==="delSent"){
+      const { date, sentId }=pinAction, arr=(state.days[date]&&state.days[date].sentences)||[], s=arr.find(x=>x.id===sentId);
+      if(state.days[date]) state.days[date].sentences=arr.filter(x=>x.id!==sentId);
+      if(s){ state.trash.unshift({ tid:tid(), type:"sentence", date, sentence:s, label:trunc(s.en||s.ko,40), deletedAt:Date.now() }); }
+    }
     try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(e){}
     closePin(); render(); return;
   }
-  // 공유 모드: 서버(Code.gs OWNER_PIN)가 검증
-  if(pinAction.type==="one") await postAction({ purgeTrash:{ tid:pinAction.tid, pin } });
-  else await postAction({ emptyTrash:{ pin } });
+
+  // 공유 모드: 서버(Code.gs OWNER_PIN)가 검증 → 비밀번호 틀리면 서버가 무시
+  if(t==="one") await postAction({ purgeTrash:{ tid:pinAction.tid, pin } });
+  else if(t==="all") await postAction({ emptyTrash:{ pin } });
+  else if(t==="delDay") await postAction({ deleteDay:{ date:pinAction.date, pin } });
+  else if(t==="delSent") await postAction({ deleteSentence:{ date:pinAction.date, sentId:pinAction.sentId, pin } });
   closePin();
-  setStatus("영구 삭제 요청 중…");
+  setStatus("삭제 요청 중…");
   setTimeout(sync, 900);
 });
 document.getElementById("trashWrap").addEventListener("click", e=>{
@@ -1032,7 +1041,7 @@ document.getElementById("list").addEventListener("click", e=>{
     return;
   }
   const dl=e.target.closest("[data-del]");
-  if(dl){ openDel(dl.getAttribute("data-del")); }
+  if(dl){ const dt=dl.getAttribute("data-del"); openPin({ type:"delDay", date:dt, text:`${fmtK(dt)}의 기록(문장 ${(state.days[dt].sentences||[]).length}개)을 휴지통으로 옮깁니다. 비밀번호를 입력하세요.` }); }
 });
 
 document.addEventListener("visibilitychange", ()=>{ if(!document.hidden){ paintSky(); sync(); } });
