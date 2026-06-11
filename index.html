@@ -182,7 +182,7 @@
   <div id="list"></div>
 
   <div class="trash-wrap" id="trashWrap"></div>
-  <p class="footnote">하늘은 지금 시간을 따라 바뀌어요 — 새벽, 아침, 낮, 노을, 그리고 별이 뜨는 밤. <span style="opacity:.55">· v5</span></p>
+  <p class="footnote">하늘은 지금 시간을 따라 바뀌어요 — 새벽, 아침, 낮, 노을, 그리고 별이 뜨는 밤. <span style="opacity:.55">· v6</span></p>
   <div class="status" id="status"></div>
 </div>
 
@@ -225,8 +225,8 @@
 <!-- 첫 완성자 이름 모달 -->
 <div class="back" id="nameBack">
   <div class="modal">
-    <div class="mtitle center">오늘의 첫 완성! ✨</div>
-    <p class="mtext">가장 먼저 완성했어요. 이름을 남겨주세요.</p>
+    <div class="mtitle center">오늘의 첫 성공! ✨</div>
+    <p class="mtext">가장 먼저 성공했어요. 이름을 남겨주세요.</p>
     <div class="field"><input class="inp" id="nameInput" placeholder="이름" maxlength="10" /></div>
     <div class="btn-row"><button class="ghost" id="nameCancel">취소</button><button class="solid" id="nameOk">남기기</button></div>
   </div>
@@ -541,20 +541,20 @@ function render(){
     const dn = d.done || null;
     let doneArea = "";
     if(dn && dn.count>0){
-      doneArea += `<div class="doneline">✨ 첫 완성 <b>${esc(dn.first||"?")}</b>${dn.count>1?` · 함께 완성 ${dn.count}명`:""}</div>`;
+      doneArea += `<div class="doneline">✨ 첫 성공 <b>${esc(dn.first||"?")}</b>${dn.count>1?` · 함께 성공 ${dn.count}명`:""}</div>`;
     }
     if(isToday){
       let pressed=false; try{ pressed = localStorage.getItem("iptyeong-done-"+date)==="1"; }catch(e){}
       // 눌렀는데 서버(시트)에 기록이 없으면 = 저장 실패였던 것 → 다시 누를 수 있게 복구
       if(pressed && !(dn && dn.count>0)){ pressed=false; try{ localStorage.removeItem("iptyeong-done-"+date); }catch(e){} }
-      doneArea += `<button class="donebtn${pressed?" off":""}" data-done="${date}" ${pressed?"disabled":""}>${pressed?"완성 표시했어요 ✓":"오늘 완성"}</button>`;
+      doneArea += `<button class="donebtn${pressed?" off":""}" data-done="${date}" ${pressed?"disabled":""}>${pressed?"성공 표시했어요 ✓":"오늘 성공"}</button>`;
     }
     const cls = "day" + (col?" collapsed":"") + (allDone?" done":"") + (isToday?" today":"");
     return `<section class="${cls}">
       <div class="dhead">
         <h2 class="dtoggle" data-collapse="${date}">${fmtK(date)} <span class="chev">${col?"▸":"▾"}</span></h2>
         <span class="ln"></span>
-        ${allDone?`<span class="daydone-badge">${isToday?"✨ 오늘 완성!":"완성"}</span>`:""}
+        ${allDone?`<span class="daydone-badge">${isToday?"✨ 오늘 성공!":"성공"}</span>`:""}
         <span class="dstar">★ ${dm}</span>
         <button class="del" data-del="${date}">삭제</button>
       </div>
@@ -894,7 +894,7 @@ document.getElementById("trashWrap").addEventListener("click", e=>{
   const pg=e.target.closest("[data-tpurge]"); if(pg){ openPin({ type:"one", tid:pg.getAttribute("data-tpurge"), text:"이 항목을 영구히 삭제합니다. 되돌릴 수 없어요." }); }
 });
 
-/* ── 오늘 완성 ── */
+/* ── 오늘 성공 ── */
 let doneTarget=null;
 function openName(date){
   doneTarget=date;
