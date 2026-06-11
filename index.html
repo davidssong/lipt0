@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="UTF-8" />
@@ -536,6 +536,8 @@ function render(){
     }
     if(isToday){
       let pressed=false; try{ pressed = localStorage.getItem("iptyeong-done-"+date)==="1"; }catch(e){}
+      // 눌렀는데 서버(시트)에 기록이 없으면 = 저장 실패였던 것 → 다시 누를 수 있게 복구
+      if(pressed && !(dn && dn.count>0)){ pressed=false; try{ localStorage.removeItem("iptyeong-done-"+date); }catch(e){} }
       doneArea += `<button class="donebtn${pressed?" off":""}" data-done="${date}" ${pressed?"disabled":""}>${pressed?"완성 표시했어요 ✓":"오늘 완성"}</button>`;
     }
     const cls = "day" + (col?" collapsed":"") + (allDone?" done":"") + (isToday?" today":"");
@@ -640,7 +642,8 @@ document.getElementById("hideKo").addEventListener("click", ()=>setHide("ko"));
 document.getElementById("hideEn").addEventListener("click", ()=>setHide("en"));
 
 /* ── 영어 읽어주기 (브라우저 내장 TTS, 음원 파일 불필요) ── */
-const ttsSupported = ("speechSynthesis" in window);
+const ttsSupported = ("speechSynthesis" in window) && ("SpeechSynthesisUtterance" in window);
+let speakTimer = null;
 function pickEnVoice(){
   try{
     const vs = window.speechSynthesis.getVoices() || [];
@@ -648,20 +651,44 @@ function pickEnVoice(){
   }catch(e){ return null; }
 }
 function speak(id){
-  if(!ttsSupported) return;
-  // 같은 문장을 다시 누르면 멈춤
-  if(speakingId===id){ window.speechSynthesis.cancel(); speakingId=null; markSpeaking(); return; }
+  if(!ttsSupported){ setStatus("이 브라우저는 음성 읽기를 지원하지 않아요 — Chrome으로 열어보세요."); return; }
+  if(speakingId===id){
+    try{ window.speechSynthesis.cancel(); }catch(e){}
+    if(speakTimer){ clearTimeout(speakTimer); speakTimer=null; }
+    speakingId=null; markSpeaking(); return;
+  }
   const s = findSentence(id);
   if(!s || !s.en){ return; }
-  window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(s.en);
-  u.lang = "en-US";
-  u.rate = 1.0;
-  const v = pickEnVoice(); if(v) u.voice = v;
-  u.onend = ()=>{ if(speakingId===id){ speakingId=null; markSpeaking(); } };
-  u.onerror = ()=>{ if(speakingId===id){ speakingId=null; markSpeaking(); } };
+  try{ window.speechSynthesis.cancel(); }catch(e){}
+  if(speakTimer){ clearTimeout(speakTimer); speakTimer=null; }
   speakingId = id; markSpeaking();
-  window.speechSynthesis.speak(u);
+  speakTimer = setTimeout(()=>{
+    speakTimer=null;
+    const u = new SpeechSynthesisUtterance(s.en);
+    u.lang = "en-US";
+    u.rate = 1.0;
+    const v = pickEnVoice(); if(v) u.voice = v;
+    let started = false;
+    u.onstart = ()=>{ started = true; };
+    u.onend = ()=>{ if(speakingId===id){ speakingId=null; markSpeaking(); } };
+    u.onerror = ()=>{
+      if(speakingId===id){ speakingId=null; markSpeaking(); }
+      setStatus("음성 재생에 실패했어요 — 기기의 영어 음성(TTS) 설치와 미디어 볼륨을 확인해보세요.");
+    };
+    try{ window.speechSynthesis.resume(); }catch(e){}
+    try{ window.speechSynthesis.speak(u); }catch(e){
+      speakingId=null; markSpeaking();
+      setStatus("음성 재생에 실패했어요 — Chrome으로 열어보세요.");
+      return;
+    }
+    setTimeout(()=>{
+      if(!started && speakingId===id){
+        try{ window.speechSynthesis.cancel(); }catch(e){}
+        speakingId=null; markSpeaking();
+        setStatus("소리가 안 나면: 미디어 볼륨 확인 → 설정에서 Google 음성(TTS) 설치 → Chrome으로 열기 순서로 확인해보세요.");
+      }
+    }, 2500);
+  }, 120);
 }
 function findSentence(id){
   for(const date in state.days){
@@ -670,15 +697,20 @@ function findSentence(id){
   }
   return null;
 }
-// 재생 중 버튼 표시만 갱신 (전체 render 안 함)
 function markSpeaking(){
   document.querySelectorAll("[data-speak]").forEach(b=>{
     b.classList.toggle("playing", b.getAttribute("data-speak")===speakingId);
   });
 }
-// 일부 브라우저는 voices 로딩이 비동기
-if(ttsSupported && window.speechSynthesis.onvoiceschanged !== undefined){
-  window.speechSynthesis.onvoiceschanged = ()=>{};
+if(ttsSupported){
+  try{ window.speechSynthesis.getVoices(); }catch(e){}
+  if(window.speechSynthesis.onvoiceschanged !== undefined){
+    window.speechSynthesis.onvoiceschanged = ()=>{ try{ window.speechSynthesis.getVoices(); }catch(e){} };
+  }
+  document.addEventListener("touchstart", function warm(){
+    try{ window.speechSynthesis.getVoices(); window.speechSynthesis.resume(); }catch(e){}
+    document.removeEventListener("touchstart", warm);
+  }, { once:true, passive:true });
 }
 
 /* 편집 모달 */
