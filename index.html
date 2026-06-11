@@ -95,6 +95,10 @@
   .membtn:active{transform:scale(.92);}
   .membtn.on{background:var(--starSoft);color:var(--star);}
   .membtn.on .pop{display:inline-block;animation:starPop .45s cubic-bezier(.2,.9,.3,1.4);}
+  .notice{display:none;margin-top:12px;background:var(--starSoft);border:1px solid #f0dfc0;border-radius:14px;padding:13px 38px 13px 15px;font-size:13.5px;line-height:1.65;color:#7a6034;position:relative;animation:fade .25s ease;}
+  .notice.on{display:block;}
+  .notice b{color:#a8772a;}
+  .notice .nclose{position:absolute;top:9px;right:9px;border:none;background:transparent;color:#c9b289;font-size:16px;line-height:1;cursor:pointer;padding:4px;}
   .doneline{font-size:13px;color:var(--soft);background:#fffdf8;border:1px solid var(--line);border-radius:12px;padding:10px 12px;text-align:center;}
   .doneline b{color:var(--star);}
   .donebtn{border:none;border-radius:12px;padding:11px;font-family:var(--body);font-size:13.5px;font-weight:700;color:#fff;cursor:pointer;background:linear-gradient(135deg,#e8a23d,#c9821f);box-shadow:0 6px 14px rgba(232,162,61,.3);transition:transform .14s ease;}
@@ -173,10 +177,12 @@
     </div>
   </div>
 
+  <div class="notice" id="notice"><button class="nclose" id="noticeClose">×</button><span id="noticeText"></span></div>
+
   <div id="list"></div>
 
   <div class="trash-wrap" id="trashWrap"></div>
-  <p class="footnote">하늘은 지금 시간을 따라 바뀌어요 — 새벽, 아침, 낮, 노을, 그리고 별이 뜨는 밤. <span style="opacity:.55">· v4</span></p>
+  <p class="footnote">하늘은 지금 시간을 따라 바뀌어요 — 새벽, 아침, 낮, 노을, 그리고 별이 뜨는 밤. <span style="opacity:.55">· v5</span></p>
   <div class="status" id="status"></div>
 </div>
 
@@ -644,6 +650,17 @@ function setHide(side){
 document.getElementById("hideKo").addEventListener("click", ()=>setHide("ko"));
 document.getElementById("hideEn").addEventListener("click", ()=>setHide("en"));
 
+/* ── 안내문 ── */
+function showNotice(html){
+  document.getElementById("noticeText").innerHTML = html;
+  document.getElementById("notice").classList.add("on");
+  try{ document.getElementById("notice").scrollIntoView({behavior:"smooth", block:"center"}); }catch(e){}
+}
+document.getElementById("noticeClose").addEventListener("click", ()=>{
+  document.getElementById("notice").classList.remove("on");
+});
+const inKakao = /KAKAOTALK/i.test(navigator.userAgent || "");
+
 /* ── 영어 읽어주기 (브라우저 내장 TTS) ── */
 const ttsSupported = ("speechSynthesis" in window) && ("SpeechSynthesisUtterance" in window);
 let speakTimer = null;
@@ -663,7 +680,7 @@ function buildUtter(s, id){
   u.onend = ()=>{ if(speakingId===id){ speakingId=null; markSpeaking(); } };
   u.onerror = ()=>{
     if(speakingId===id){ speakingId=null; markSpeaking(); }
-    setStatus("음성 재생에 실패했어요 — 기기의 영어 음성(TTS)과 미디어 볼륨을 확인해보세요.");
+    showNotice("음성 재생에 실패했어요. 기기의 <b>영어 음성(TTS)</b> 설치와 <b>미디어 볼륨</b>을 확인해보세요.");
   };
   return u;
 }
@@ -671,19 +688,26 @@ function fireSpeak(u, id){
   try{ window.speechSynthesis.resume(); }catch(e){}
   try{ window.speechSynthesis.speak(u); }catch(e){
     speakingId=null; markSpeaking();
-    setStatus("음성 재생에 실패했어요 — Chrome으로 열어보세요.");
+    showNotice("음성 재생에 실패했어요. <b>Chrome</b>으로 열어보세요.");
     return;
   }
   setTimeout(()=>{
     if(!u._started && speakingId===id){
       try{ window.speechSynthesis.cancel(); }catch(e){}
       speakingId=null; markSpeaking();
-      setStatus("소리가 안 나면: 미디어 볼륨 → 기기 설정의 Google 음성(TTS) → Chrome으로 열기 순으로 확인해보세요.");
+      showNotice("소리가 안 나요. <b>미디어 볼륨</b> → 기기 설정의 <b>Google 음성(TTS)</b> → <b>Chrome으로 열기</b> 순서로 확인해보세요.");
     }
   }, 2500);
 }
 function speak(id){
-  if(!ttsSupported){ setStatus("이 브라우저는 음성 읽기를 지원하지 않아요 — Chrome으로 열어보세요."); return; }
+  if(inKakao){
+    showNotice("카카오톡 안에서는 듣기 기능이 지원되지 않아요.<br>화면 아래 <b>점 세 개(⋮)</b> 메뉴에서 <b>다른 브라우저로 열기</b>를 눌러주세요. 그러면 소리가 나와요!");
+    return;
+  }
+  if(!ttsSupported){
+    showNotice("이 브라우저는 음성 읽기를 지원하지 않아요.<br><b>Chrome</b>으로 열어보세요.");
+    return;
+  }
   if(speakingId===id){
     try{ window.speechSynthesis.cancel(); }catch(e){}
     if(speakTimer){ clearTimeout(speakTimer); speakTimer=null; }
