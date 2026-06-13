@@ -556,9 +556,17 @@ function render(){
     }
     if(isToday){
       let pressed=false; try{ pressed = localStorage.getItem("iptyeong-done-"+date)==="1"; }catch(e){}
+      const hasFirst = !!(dn && dn.count>0);
       // 눌렀는데 서버(시트)에 기록이 없으면 = 저장 실패였던 것 → 다시 누를 수 있게 복구
-      if(pressed && !(dn && dn.count>0)){ pressed=false; try{ localStorage.removeItem("iptyeong-done-"+date); }catch(e){} }
-      doneArea += `<button class="donebtn${pressed?" off":""}" data-done="${date}" ${pressed?"disabled":""}>${pressed?"성공 표시했어요 ✓":"오늘 성공"}</button>`;
+      if(pressed && !hasFirst){ pressed=false; try{ localStorage.removeItem("iptyeong-done-"+date); }catch(e){} }
+      if(pressed){
+        doneArea += `<button class="donebtn off" data-done="${date}" disabled>성공 표시했어요 ✓</button>`;
+      } else if(!hasFirst && dm<1){
+        // 첫 성공 자격 없음: 문장을 외우고 별(★)을 하나 이상 눌러야 함
+        doneArea += `<button class="donebtn off" disabled title="문장을 외우고 별(★)을 누르면 오늘 성공을 표시할 수 있어요">★ 모으면 오늘 성공</button>`;
+      } else {
+        doneArea += `<button class="donebtn" data-done="${date}">오늘 성공</button>`;
+      }
     }
     const cls = "day" + (col?" collapsed":"") + (allDone?" done":"") + (isToday?" today":"");
     return `<section class="${cls}">
@@ -722,6 +730,8 @@ document.getElementById("addOk").addEventListener("click", async ()=>{
   const err=document.getElementById("addErr");
   if(!date){ err.textContent="날짜를 선택해주세요."; err.style.display="block"; return; }
   if(date > todayIso()){ err.textContent="오늘 이후의 날짜에는 작성할 수 없어요."; err.style.display="block"; return; }
+  // 문장 없이 빈 칸만 만드는 것 방지: 영어/번역 중 하나는 필수
+  if(!aEn && !aKo){ err.textContent="영어 문장이나 번역을 입력해주세요."; err.style.display="block"; return; }
   err.style.display="none";
   document.getElementById("addBack").classList.remove("on");
   // 동일 날짜는 카드를 새로 만들지 않고 그 카드에 합쳐짐
@@ -729,7 +739,7 @@ document.getElementById("addOk").addEventListener("click", async ()=>{
   else if(title) state.days[date].title=title;
   render();
   await postAction({ addDay:{ date, title } });
-  if(aEn || aKo){ await upsertSentence(date, uid(), aEn, aKo, false); }
+  await upsertSentence(date, uid(), aEn, aKo, false);
 });
 
 document.getElementById("reviewBtn").addEventListener("click", ()=>{
@@ -1069,8 +1079,14 @@ document.getElementById("list").addEventListener("click", e=>{
     const dt=dnb.getAttribute("data-done");
     const day=state.days[dt];
     if(!day) return;
-    if(!day.done || !day.done.count){ openName(dt); }   // 첫 완성 → 이름 입력
-    else { markDone(dt, ""); }                            // 이후 → 카운트만
+    const isFirst = !day.done || !day.done.count;
+    if(isFirst){
+      const starCount=(day.sentences||[]).filter(s=>s.memorized).length;
+      if(starCount<1){ setStatus("문장을 외우고 별(★)을 누른 뒤 오늘 성공을 표시할 수 있어요."); return; }
+      openName(dt);   // 첫 성공 → 이름 입력
+    } else {
+      markDone(dt, "");  // 이후 → 카운트만
+    }
     return;
   }
   const dl=e.target.closest("[data-del]");
